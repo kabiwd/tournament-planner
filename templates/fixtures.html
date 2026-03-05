@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Fixtures — {{ tournament.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Fixtures</h1>
+        <p class="page-sub">{{ tournament.name }} · {{ tournament.sport_type | title }}</p>
+    </div>
+    <div class="page-header-actions">
+        {% if tournament.format == 'round_robin' and not tournament.is_setup() %}
+        <form method="POST" action="{{ url_for('tournament.run_schedule', tournament_id=tournament.id) }}"
+              id="schedule-form" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-accent"
+                    title="Re-run the auto-scheduler on all non-locked pending matches">
+                📅 Schedule Fixtures
+            </button>
+        </form>
+        <a href="{{ url_for('standings.export_fixtures_pdf', tournament_id=tournament.id) }}"
+           class="btn btn-outline" title="Download PDF of all fixtures">⬇ PDF</a>
+        {% endif %}
+        <a href="{{ url_for('match.results_page', tournament_id=tournament.id) }}" class="btn btn-primary">Update Results →</a>
+    </div>
+</div>
+
+{# ── Scheduling summary bar (round robin only) ─────────────────────────────── #}
+{% if tournament.format == 'round_robin' and not tournament.is_setup() %}
+{% set sched_count   = matches | selectattr('scheduled_at') | list | length %}
+{% set unsched_count = matches | rejectattr('is_bye') | selectattr('status', 'in', ['pending']) | list | length %}
+{% set locked_count  = matches | selectattr('manual_locked') | list | length %}
+{% if sched_count > 0 or unsched_count > 0 %}
+<div class="sched-summary-bar">
+    <span class="sched-summary-item">
+        <span class="dot dot-completed"></span> {{ sched_count }} scheduled
+    </span>
+    {% if locked_count > 0 %}
+    <span class="sched-summary-item sched-locked">
+        🔒 {{ locked_count }} manually locked
+    </span>
+    {% endif %}
+    {% if unsched_count > 0 %}
+    <span class="sched-summary-item sched-warn">
+        <span class="dot dot-pending"></span> {{ unsched_count }} unscheduled
+        <span class="sched-warn-label">⚠️ Click "Schedule Fixtures" to retry</span>
+    </span>
+    {% endif %}
+    {% if tournament.sched_start_date %}
+    <span class="sched-summary-item sched-info">
+        📅 From {{ tournament.sched_start_date.strftime('%b %d, %Y') }} · Mon–Fri 7:30 PM · Sat–Sun 3:30 &amp; 7:30 PM
+    </span>
+    {% endif %}
+    <a href="{{ url_for('standings.schedule_view', tournament_id=tournament.id) }}"
+       class="sched-summary-item sched-link">View by Date →</a>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="filters-bar">
+    <form method="GET" action="{{ url_for('match.fixtures', tournament_id=tournament.id) }}" class="filters-form">
+        <div class="filter-group">
+            <input type="text" name="q" value="{{ search_query }}"
+                   placeholder="Search team..." class="form-input form-input-sm">
+        </div>
+        <div class="filter-group">
+            <select name="round" class="form-select form-select-sm">
+                <option value="">All Rounds</option>
+                {% for r in all_rounds %}
+                <option value="{{ r }}" {% if round_filter == r %}selected{% endif %}>Round {{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All Status</option>
+                <option value="pending"   {% if status_filter == 'pending'   %}selected{% endif %}>Unscheduled</option>
+                <option value="scheduled" {% if status_filter == 'scheduled' %}selected{% endif %}>Scheduled</option>
+                <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        <a href="{{ url_for('match.fixtures', tournament_id=tournament.id) }}" class="btn btn-outline btn-sm">Clear</a>
+    </form>
+    <div class="filter-count">{{ matches | length }} match(es)</div>
+</div>
+
+{% if matches %}
+    {% set ns = namespace(cur_round=0) %}
+    {% for match in matches %}
+        {% if match.round_number != ns.cur_round %}
+            {% if ns.cur_round != 0 %}</div>{% endif %}
+            <div class="round-section">
+            <div class="round-header">
+                <h2 class="round-title">
+                    {% if tournament.format == 'knockout' %}
+                        {% set total_r = (matches | map(attribute='round_number') | max) %}
+                        {% if match.round_number == total_r %}🏆 Final
+                        {% elif match.round_number == total_r - 1 %}Semi Final
+                        {% elif match.round_number == total_r - 2 %}Quarter Final
+                        {% else %}Round {{ match.round_number }}{% endif %}
+                    {% else %}
+                        Round {{ match.round_number }}
+                    {% endif %}
+                </h2>
+                <span class="round-badge">
+                    {{ matches | selectattr('round_number', 'equalto', match.round_number) | selectattr('status', 'equalto', 'completed') | list | length }} /
+                    {{ matches | selectattr('round_number', 'equalto', match.round_number) | list | length }} done
+                </span>
+            </div>
+            {% set ns.cur_round = match.round_number %}
+        {% endif %}
+
+        <div class="match-card match-card-{{ match.status }}{% if match.is_bye %} match-bye{% endif %}{% if match.manual_locked %} match-locked{% endif %}">
+            {% if match.is_bye %}
+                <div class="match-bye-label">BYE</div>
+                <div class="match-teams">
+                    <span class="team-name-match bye-team">{{ match.team1.name if match.team1 else '?' }}</span>
+                    <span class="match-vs">→ ADVANCES</span>
+                    <span class="team-name-match">—</span>
+                </div>
+            {% else %}
+                <div class="match-status-dot dot-{{ match.status }}"></div>
+                <div class="match-teams">
+                    <span class="team-name-match {% if match.winner_id == match.team1_id %}match-winner{% endif %}">
+                        {{ match.team1.name if match.team1 else 'TBD' }}
+                    </span>
+
+                    <div class="match-score">
+                        {% if match.status == 'completed' %}
+                            {% if tournament.is_score_based() %}
+                                <span class="score {% if match.winner_id == match.team1_id %}score-win{% endif %}">{{ match.team1_score }}</span>
+                                <span class="score-sep">—</span>
+                                <span class="score {% if match.winner_id == match.team2_id %}score-win{% endif %}">{{ match.team2_score }}</span>
+                            {% else %}
+                                {% if match.result_type == 'tie' %}<span class="result-chip chip-tie">TIE</span>
+                                {% elif match.result_type == 'no_result' %}<span class="result-chip chip-nr">N/R</span>
+                                {% elif match.winner %}<span class="result-chip chip-win">WON</span>
+                                {% else %}<span class="score-placeholder">—</span>{% endif %}
+                            {% endif %}
+                        {% else %}
+                            <span class="score-placeholder">vs</span>
+                        {% endif %}
+                    </div>
+
+                    <span class="team-name-match {% if match.winner_id == match.team2_id %}match-winner{% endif %}">
+                        {{ match.team2.name if match.team2 else 'TBD' }}
+                    </span>
+                </div>
+
+                {% if match.status == 'completed' %}
+                    {% if match.winner %}<div class="match-result-label">Winner: <strong>{{ match.winner.name }}</strong></div>
+                    {% elif match.result_type == 'tie' %}<div class="match-result-label">Match tied</div>
+                    {% elif match.result_type == 'no_result' %}<div class="match-result-label">No result / Abandoned</div>
+                    {% elif tournament.is_score_based() %}<div class="match-result-label">Draw</div>{% endif %}
+                {% endif %}
+
+                {# ── Schedule info + manual edit ───────────────────────────── #}
+                <div class="match-schedule-row">
+                    {% if match.scheduled_at %}
+                        <span class="match-date-chip">📅 {{ match.scheduled_at.strftime('%a, %d %b %Y') }}</span>
+                        <span class="match-time-chip">🕐 {{ match.scheduled_at.strftime('%I:%M %p') }}</span>
+                        {% if match.manual_locked %}
+                        <span class="match-locked-chip" title="Manually locked — auto-scheduler will not overwrite this">🔒 Locked</span>
+                        {% endif %}
+                    {% elif match.status == 'pending' and tournament.format == 'round_robin' %}
+                        <span class="match-unscheduled-chip">⏳ Unscheduled</span>
+                    {% endif %}
+
+                    {# Manual schedule edit (pending + scheduled, round-robin only) #}
+                    {% if match.status != 'completed' and tournament.format == 'round_robin' %}
+                    <button class="btn-schedule-edit" onclick="toggleScheduleEdit({{ match.id }})"
+                            title="Set/edit scheduled date and time">✏ Edit time</button>
+                    <div class="schedule-edit-panel" id="sched-edit-{{ match.id }}" style="display:none;">
+                        <form method="POST"
+                              action="{{ url_for('match.set_match_schedule', tournament_id=tournament.id, match_id=match.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="sched-edit-hint">
+                                Allowed: Mon–Fri 19:30 · Sat–Sun 15:30 or 19:30
+                            </div>
+                            <input type="datetime-local" name="scheduled_at"
+                                   class="form-input form-input-sm"
+                                   value="{{ match.scheduled_at.strftime('%Y-%m-%dT%H:%M') if match.scheduled_at else '' }}">
+                            <button type="submit" class="btn btn-primary btn-sm">Save &amp; Lock</button>
+                            <button type="submit" name="scheduled_at" value=""
+                                    class="btn btn-outline btn-sm">Clear</button>
+                            <button type="button" class="btn btn-outline btn-sm"
+                                    onclick="toggleScheduleEdit({{ match.id }})">Cancel</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+            <div class="match-meta">M{{ match.match_number }}</div>
+        </div>
+
+    {% endfor %}
+    </div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📋</div>
+    <h3>No matches found</h3>
+    <p>Try adjusting your filters.</p>
+    <a href="{{ url_for('match.fixtures', tournament_id=tournament.id) }}" class="btn btn-outline">Clear Filters</a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleScheduleEdit(matchId) {
+    const panel = document.getElementById('sched-edit-' + matchId);
+    const isOpen = panel.style.display !== 'none';
+    document.querySelectorAll('.schedule-edit-panel').forEach(p => p.style.display = 'none');
+    if (!isOpen) panel.style.display = 'block';
+}
+</script>
+{% endblock %}

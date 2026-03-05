@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Progress — {{ tournament.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Tournament Progress</h1>
+        <p class="page-sub">{{ tournament.name }}</p>
+    </div>
+    <div class="header-actions">
+        {% if tournament.format == 'round_robin' %}
+        <a href="{{ url_for('standings.standings', tournament_id=tournament.id) }}" class="btn btn-secondary">Standings Table</a>
+        {% endif %}
+        <a href="{{ url_for('match.results_page', tournament_id=tournament.id) }}" class="btn btn-primary">Update Results →</a>
+    </div>
+</div>
+
+<!-- Champion Banner -->
+{% if champion %}
+<div class="champion-banner">
+    <div class="champion-trophy">🏆</div>
+    <div class="champion-info">
+        <div class="champion-label">CHAMPION</div>
+        <div class="champion-name">{{ champion.name }}</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Stats Overview -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-num">{{ (rounds | length) }}</div>
+        <div class="stat-label">Total Rounds</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-num">{{ completed_matches | length }}</div>
+        <div class="stat-label">Completed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-num">{{ pending_matches | length }}</div>
+        <div class="stat-label">Remaining</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-num">{{ tournament.current_round }}</div>
+        <div class="stat-label">Current Round</div>
+    </div>
+</div>
+
+<!-- Bracket / Round Progress -->
+{% if rounds %}
+<div class="progress-section">
+    {% for round_num, round_matches in rounds.items() | sort %}
+    <div class="progress-round {% if round_num == tournament.current_round %}round-active{% endif %}">
+        <div class="progress-round-header">
+            <div class="progress-round-title">
+                {% if tournament.format == 'knockout' %}
+                    {% set total_rounds = rounds | length %}
+                    {% if round_num == total_rounds %}
+                        🏆 Final
+                    {% elif round_num == total_rounds - 1 %}
+                        Semi Final
+                    {% elif round_num == total_rounds - 2 %}
+                        Quarter Final
+                    {% else %}
+                        Round {{ round_num }}
+                    {% endif %}
+                {% else %}
+                    Round {{ round_num }}
+                {% endif %}
+                {% if round_num == tournament.current_round and not tournament.is_completed() %}
+                    <span class="active-tag">IN PROGRESS</span>
+                {% endif %}
+            </div>
+            {% set round_done = round_matches | selectattr('status', 'equalto', 'completed') | list | length %}
+            {% set round_total = round_matches | rejectattr('is_bye') | list | length %}
+            <div class="round-progress-bar">
+                <div class="round-progress-fill" style="width: {{ (round_done / round_total * 100) if round_total > 0 else 0 }}%"></div>
+            </div>
+            <span class="round-done-label">{{ round_done }}/{{ round_total }}</span>
+        </div>
+
+        <div class="progress-matches">
+            {% for match in round_matches %}
+            {% if not match.is_bye %}
+            <div class="progress-match progress-match-{{ match.status }}">
+                <span class="pm-team {% if match.winner_id == match.team1_id %}pm-winner{% endif %}">
+                    {{ match.team1.name if match.team1 else 'TBD' }}
+                </span>
+                <div class="pm-score">
+                    {% if match.status == 'completed' %}
+                        {% if tournament.is_score_based() %}
+                            {# Score-based: show numeric result #}
+                            <span class="{% if match.winner_id == match.team1_id %}score-win{% endif %}">{{ match.team1_score }}</span>
+                            <span class="pm-sep">—</span>
+                            <span class="{% if match.winner_id == match.team2_id %}score-win{% endif %}">{{ match.team2_score }}</span>
+                        {% else %}
+                            {# Winner-only: show outcome chip instead of None scores #}
+                            {% if match.result_type == 'tie' %}
+                                <span class="result-chip chip-tie">TIE</span>
+                            {% elif match.result_type == 'no_result' %}
+                                <span class="result-chip chip-nr">N/R</span>
+                            {% elif match.winner %}
+                                <span class="result-chip chip-win">WON</span>
+                            {% else %}
+                                <span class="pm-pending">—</span>
+                            {% endif %}
+                        {% endif %}
+                    {% else %}
+                        <span class="pm-pending">—</span>
+                    {% endif %}
+                </div>
+                <span class="pm-team {% if match.winner_id == match.team2_id %}pm-winner{% endif %}">
+                    {{ match.team2.name if match.team2 else 'TBD' }}
+                </span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">🎯</div>
+    <h3>No fixtures yet</h3>
+    <p>Generate fixtures to see tournament progress.</p>
+    <a href="{{ url_for('team.manage_teams', tournament_id=tournament.id) }}" class="btn btn-primary">Go to Team Management</a>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Create Tournament{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1 class="page-title">Create Tournament</h1>
+    <p class="page-sub">Set up a new competition</p>
+</div>
+
+<div class="form-container">
+    <form method="POST" action="{{ url_for('tournament.create_tournament') }}" id="create-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label class="form-label" for="name">Tournament Name</label>
+            <input type="text" id="name" name="name" class="form-input"
+                   placeholder="e.g., IPL 2025, Champions Cup"
+                   required maxlength="100" autocomplete="off">
+            <span class="form-hint">Must be unique. Max 100 characters.</span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Format</label>
+            <div class="format-cards">
+                <label class="format-card" for="format-rr">
+                    <input type="radio" id="format-rr" name="format" value="round_robin" required>
+                    <div class="format-card-inner">
+                        <div class="format-icon">◉</div>
+                        <div class="format-name">Round Robin</div>
+                        <div class="format-desc">Every team plays every other. Points determine the winner.</div>
+                    </div>
+                </label>
+                <label class="format-card" for="format-ko">
+                    <input type="radio" id="format-ko" name="format" value="knockout" required>
+                    <div class="format-card-inner">
+                        <div class="format-icon">⚡</div>
+                        <div class="format-name">Knockout</div>
+                        <div class="format-desc">Single elimination. Winners advance, losers go home.</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="sport_type">Sport / Game Type</label>
+            <select id="sport_type" name="sport_type" class="form-select">
+                <option value="football">Football / Soccer</option>
+                <option value="cricket">Cricket</option>
+                <option value="basketball">Basketball</option>
+                <option value="esports">Esports</option>
+                <option value="generic">Generic / Other</option>
+            </select>
+            <div class="sport-info-box" id="sport-info"></div>
+        </div>
+
+        <!-- Point rules (round robin only) -->
+        <div class="form-group" id="point-rules" style="display:none;">
+            <label class="form-label">Point Rules</label>
+            <div class="point-rules-row">
+                <div class="point-rule-item">
+                    <label class="form-hint">Win</label>
+                    <input type="number" name="points_win" id="pts_win"
+                           class="form-input score-input-sm" value="3" min="0" max="99">
+                </div>
+                <div class="point-rule-item">
+                    <label class="form-hint" id="draw-label">Draw</label>
+                    <input type="number" name="points_draw" id="pts_draw"
+                           class="form-input score-input-sm" value="1" min="0" max="99">
+                </div>
+                <div class="point-rule-item">
+                    <label class="form-hint">Loss</label>
+                    <input type="number" name="points_loss" id="pts_loss"
+                           class="form-input score-input-sm" value="0" min="0" max="99">
+                </div>
+            </div>
+            <span class="form-hint" id="point-rules-hint"></span>
+        </div>
+
+        <!-- ── Scheduling config (round-robin only) ──────────────────────── -->
+        <div class="form-group sched-config" id="sched-config" style="display:none;">
+            <label class="form-label">
+                📅 Match Scheduling
+                <span class="form-hint-inline">IPL-style weekend slots</span>
+            </label>
+            <div class="sched-config-box">
+                <div class="sched-row">
+                    <div class="sched-field">
+                        <label class="form-hint" for="sched_start_date">Start Date</label>
+                        <input type="date" id="sched_start_date" name="sched_start_date"
+                               class="form-input form-input-sm" value="{{ today }}">
+                        <span class="form-hint">First day matches may be played.</span>
+                    </div>
+                    <div class="sched-field">
+                        <label class="form-hint" for="sched_end_date">End Date <em>(optional)</em></label>
+                        <input type="date" id="sched_end_date" name="sched_end_date"
+                               class="form-input form-input-sm">
+                        <span class="form-hint">Leave blank for default ~2 month window.</span>
+                    </div>
+                    <div class="sched-field sched-field-sm">
+                        <label class="form-hint" for="sched_min_rest">Min Rest Days</label>
+                        <input type="number" id="sched_min_rest" name="sched_min_rest"
+                               class="form-input form-input-sm" value="2" min="1" max="7">
+                        <span class="form-hint">Between matches per team.</span>
+                    </div>
+                </div>
+                <div class="sched-info-row">
+                    <span class="sched-chip">📅 Weekends only</span>
+                    <span class="sched-chip">🕞 3:30 PM &amp; 7:30 PM</span>
+                    <span class="sched-chip">😴 ≥ 2 days rest</span>
+                    <span class="sched-chip">🔁 Greedy round-robin</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('tournament.index') }}" class="btn btn-outline">Cancel</a>
+            <button type="submit" class="btn btn-primary">Create &amp; Add Teams →</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SPORT_META = {
+    football:   { mode: 'score_based',  label: 'football',   winPts: 3, drawPts: 1, lossPts: 0, drawLabel: 'Draw',
+                  info: '⚽ Score-based. Enter numeric scores for each match. Draws allowed in league stage.' },
+    basketball: { mode: 'score_based',  label: 'basketball', winPts: 3, drawPts: 1, lossPts: 0, drawLabel: 'Draw',
+                  info: '🏀 Score-based. Enter point totals for each team. High scores typical.' },
+    cricket:    { mode: 'winner_only',  label: 'cricket',    winPts: 2, drawPts: 1, lossPts: 0, drawLabel: 'Tie',
+                  info: '🏏 Winner-only. Select the winning team or mark as Tie / No Result. No fake NRR calculated.' },
+    esports:    { mode: 'winner_only',  label: 'esports',    winPts: 1, drawPts: 0, lossPts: 0, drawLabel: 'Tie',
+                  info: '🎮 Winner-only. Select the winning team. Structured for future BO3/BO5 upgrade.' },
+    generic:    { mode: 'score_based',  label: 'generic',    winPts: 3, drawPts: 1, lossPts: 0, drawLabel: 'Draw',
+                  info: '📋 Generic. Score-based entry with configurable labels.' },
+};
+
+function updateSportUI() {
+    const sport  = document.getElementById('sport_type').value;
+    const fmtEl  = document.querySelector('input[name="format"]:checked');
+    const meta   = SPORT_META[sport] || SPORT_META.generic;
+    const isRR   = fmtEl && fmtEl.value === 'round_robin';
+
+    document.getElementById('sport-info').innerHTML =
+        '<div class="sport-info">' + meta.info + '</div>';
+
+    const rulesDiv  = document.getElementById('point-rules');
+    const schedDiv  = document.getElementById('sched-config');
+    rulesDiv.style.display = isRR ? '' : 'none';
+    schedDiv.style.display = isRR ? '' : 'none';
+
+    if (isRR) {
+        document.getElementById('pts_win').value   = meta.winPts;
+        document.getElementById('pts_draw').value  = meta.drawPts;
+        document.getElementById('pts_loss').value  = meta.lossPts;
+        document.getElementById('draw-label').textContent = meta.drawLabel + '/Tie';
+
+        const hint = document.getElementById('point-rules-hint');
+        if (meta.mode === 'winner_only') {
+            hint.textContent = 'Default for ' + meta.label + ': Win=' + meta.winPts + ', Tie=' + meta.drawPts + ', Loss=' + meta.lossPts + '.';
+        } else {
+            hint.textContent = 'Default for ' + meta.label + ': Win=' + meta.winPts + ', Draw=' + meta.drawPts + ', Loss=' + meta.lossPts + '.';
+        }
+    }
+}
+
+document.getElementById('sport_type').addEventListener('change', updateSportUI);
+document.querySelectorAll('input[name="format"]').forEach(r => r.addEventListener('change', updateSportUI));
+updateSportUI();
+</script>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Schedule — {{ tournament.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Match Schedule</h1>
+        <p class="page-sub">{{ tournament.name }} · Chronological view</p>
+    </div>
+    <div class="page-header-actions">
+        <form method="POST" action="{{ url_for('tournament.run_schedule', tournament_id=tournament.id) }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-accent">📅 Re-schedule</button>
+        </form>
+        <a href="{{ url_for('standings.export_fixtures_pdf', tournament_id=tournament.id) }}"
+           class="btn btn-outline" title="Download PDF of all fixtures">⬇ PDF</a>
+        <a href="{{ url_for('match.fixtures', tournament_id=tournament.id) }}" class="btn btn-outline">Round View</a>
+    </div>
+</div>
+
+{# ── Slot rules reminder ───────────────────────────────────────────────────── #}
+<div class="sched-rules-bar">
+    <span class="sched-rule-item">📅 <strong>Weekdays:</strong> 7:30 PM (1 match/day)</span>
+    <span class="sched-rule-sep">·</span>
+    <span class="sched-rule-item">📅 <strong>Weekends:</strong> 3:30 PM &amp; 7:30 PM (2 matches/day)</span>
+    {% if tournament.sched_min_rest %}
+    <span class="sched-rule-sep">·</span>
+    <span class="sched-rule-item">⏱ Min rest: {{ tournament.sched_min_rest }} days</span>
+    {% endif %}
+</div>
+
+{% if date_groups %}
+<div class="sched-view-section">
+    <h2 class="section-title">
+        Scheduled Matches
+        <span class="section-count">{{ scheduled_count }}</span>
+    </h2>
+
+    {% for d, day_matches in date_groups.items() %}
+    <div class="sched-day-group">
+        <div class="sched-day-header">
+            <span class="sched-day-label">{{ d.strftime('%A, %d %B %Y') }}</span>
+            <span class="sched-day-weekday-badge {% if d.weekday() >= 5 %}badge-weekend{% else %}badge-weekday{% endif %}">
+                {{ 'Weekend' if d.weekday() >= 5 else 'Weekday' }}
+            </span>
+            <span class="sched-day-count">{{ day_matches | length }} match(es)</span>
+        </div>
+
+        {% for match in day_matches %}
+        <div class="sched-match-row sched-match-{{ match.status }}">
+            <div class="sched-time">{{ match.scheduled_at.strftime('%I:%M %p') }}</div>
+            <div class="sched-teams">
+                <span class="{% if match.winner_id == match.team1_id %}sched-winner{% endif %}">
+                    {{ match.team1.name if match.team1 else 'TBD' }}
+                </span>
+                <div class="sched-vs-area">
+                    {% if match.status == 'completed' %}
+                        {% if tournament.is_score_based() %}
+                            <span class="sched-score">{{ match.team1_score }} — {{ match.team2_score }}</span>
+                        {% elif match.result_type == 'tie' %}
+                            <span class="result-chip chip-tie">TIE</span>
+                        {% elif match.result_type == 'no_result' %}
+                            <span class="result-chip chip-nr">N/R</span>
+                        {% elif match.winner %}
+                            <span class="result-chip chip-win">WON</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="sched-vs-dot">vs</span>
+                    {% endif %}
+                </div>
+                <span class="{% if match.winner_id == match.team2_id %}sched-winner{% endif %}">
+                    {{ match.team2.name if match.team2 else 'TBD' }}
+                </span>
+            </div>
+            <div class="sched-meta">
+                <span class="sched-round-tag">R{{ match.round_number }} M{{ match.match_number }}</span>
+                {% if match.manual_locked %}
+                <span class="sched-locked-tag" title="Manually locked">🔒</span>
+                {% endif %}
+                <span class="sched-status-tag sched-tag-{{ match.status }}">{{ match.status | upper }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if unscheduled %}
+<div class="sched-view-section sched-unscheduled-section">
+    <h2 class="section-title">
+        Unscheduled Matches
+        <span class="section-count warn-count">{{ unscheduled | length }}</span>
+    </h2>
+    <div class="sched-unscheduled-note">
+        ⚠️ These matches have no assigned date/time. Re-run the scheduler or edit them manually in the Fixtures view.
+    </div>
+    {% for match in unscheduled %}
+    <div class="sched-match-row sched-match-pending">
+        <div class="sched-time sched-time-empty">—</div>
+        <div class="sched-teams">
+            <span>{{ match.team1.name if match.team1 else 'TBD' }}</span>
+            <span class="sched-vs-dot">vs</span>
+            <span>{{ match.team2.name if match.team2 else 'TBD' }}</span>
+        </div>
+        <div class="sched-meta">
+            <span class="sched-round-tag">R{{ match.round_number }} M{{ match.match_number }}</span>
+            <span class="sched-status-tag sched-tag-pending">UNSCHEDULED</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if not date_groups and not unscheduled %}
+<div class="empty-state">
+    <div class="empty-icon">📅</div>
+    <h3>No schedule yet</h3>
+    <p>Run the auto-scheduler to assign dates and time slots to all matches.</p>
+    <form method="POST" action="{{ url_for('tournament.run_schedule', tournament_id=tournament.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">📅 Schedule Fixtures</button>
+    </form>
+</div>
+{% endif %}
+
+{% endblock %}

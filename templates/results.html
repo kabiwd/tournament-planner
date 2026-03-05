@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Update Results — {{ tournament.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Update Results</h1>
+        <p class="page-sub">
+            {{ tournament.name }} —
+            {{ 'Round Robin' if tournament.format == 'round_robin' else 'Knockout' }} ·
+            {{ tournament.sport_type | title }}
+        </p>
+    </div>
+    <a href="{{ url_for('match.fixtures', tournament_id=tournament.id) }}" class="btn btn-outline">View All Fixtures</a>
+</div>
+
+{% if tournament.is_completed() %}
+<div class="completed-banner">
+    🏆 Tournament Completed!
+    <a href="{{ url_for('standings.progress', tournament_id=tournament.id) }}" class="btn btn-primary btn-sm">View Results</a>
+</div>
+{% endif %}
+
+{# ── Editable matches ──────────────────────────────────────────────────────── #}
+{% if editable_matches %}
+<div class="results-section">
+    <div class="section-header">
+        {% if tournament.format == 'round_robin' %}
+        <h2 class="section-title">Pending Matches <span class="rr-open-note">— enter results in any order</span></h2>
+        <span class="section-count">{{ editable_matches | length }} to play</span>
+        {% else %}
+        <h2 class="section-title">Round {{ current_round }} — Pending</h2>
+        <span class="section-count">{{ editable_matches | length }} to play</span>
+        {% endif %}
+    </div>
+    <div class="results-grid">
+        {% for match in editable_matches %}
+        <div class="result-card" id="match-{{ match.id }}">
+            <div class="result-card-header">
+                <span class="result-round-tag">R{{ match.round_number }} M{{ match.match_number }}</span>
+                {% if match.scheduled_at %}
+                <span class="result-sched-tag">📅 {{ match.scheduled_at.strftime('%a %d %b, %I:%M %p') }}</span>
+                {% endif %}
+                {% if match.manual_locked %}
+                <span class="result-lock-tag" title="Manually scheduled — locked from auto-reschedule">🔒</span>
+                {% endif %}
+                <span class="result-status {{ match.status }}">{{ match.status | upper }}</span>
+            </div>
+
+            <form action="{{ url_for('match.update_result', tournament_id=tournament.id, match_id=match.id) }}"
+                  method="POST" class="result-form"
+                  data-mode="{{ tournament.result_mode }}"
+                  data-format="{{ tournament.format }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {# ── SCORE-BASED ─────────────────────────────────────── #}
+                {% if tournament.is_score_based() %}
+                <div class="result-teams">
+                    <div class="result-team">
+                        <div class="result-team-avatar">{{ match.team1.name[0] if match.team1 else '?' }}</div>
+                        <div class="result-team-name">{{ match.team1.name if match.team1 else 'TBD' }}</div>
+                        <input type="number" name="score1" class="score-input"
+                               min="0" max="999" value="0" required>
+                    </div>
+                    <div class="result-vs">VS</div>
+                    <div class="result-team">
+                        <div class="result-team-avatar">{{ match.team2.name[0] if match.team2 else '?' }}</div>
+                        <div class="result-team-name">{{ match.team2.name if match.team2 else 'TBD' }}</div>
+                        <input type="number" name="score2" class="score-input"
+                               min="0" max="999" value="0" required>
+                    </div>
+                </div>
+                {% if tournament.format == 'knockout' %}
+                <div class="result-note">⚡ Winner advances — draws not allowed</div>
+                {% else %}
+                <div class="result-note">◉ Win={{ tournament.points_win }}pts · Draw={{ tournament.points_draw }}pt each</div>
+                {% endif %}
+
+                {# ── WINNER-ONLY ─────────────────────────────────────── #}
+                {% else %}
+                <div class="winner-only-form">
+                    <div class="wo-teams">
+                        <div class="result-team-avatar">{{ match.team1.name[0] if match.team1 else '?' }}</div>
+                        <span class="wo-team-name">{{ match.team1.name if match.team1 else 'TBD' }}</span>
+                        <span class="wo-vs">vs</span>
+                        <div class="result-team-avatar">{{ match.team2.name[0] if match.team2 else '?' }}</div>
+                        <span class="wo-team-name">{{ match.team2.name if match.team2 else 'TBD' }}</span>
+                    </div>
+
+                    <div class="wo-type-row">
+                        <label class="form-hint">Result</label>
+                        <div class="wo-type-options">
+                            <label class="wo-type-option">
+                                <input type="radio" name="result_type" value="win" checked class="wo-type-radio">
+                                <span>Win</span>
+                            </label>
+                            {# Tie only for cricket + round robin #}
+                            {% if tournament.sport_type == 'cricket' and tournament.format == 'round_robin' %}
+                            <label class="wo-type-option">
+                                <input type="radio" name="result_type" value="tie" class="wo-type-radio">
+                                <span>Tie</span>
+                            </label>
+                            {% endif %}
+                            {# No Result only for cricket #}
+                            {% if tournament.sport_type == 'cricket' %}
+                            <label class="wo-type-option">
+                                <input type="radio" name="result_type" value="no_result" class="wo-type-radio">
+                                <span>No Result</span>
+                            </label>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="wo-winner-row" id="winner-row-{{ match.id }}">
+                        <label class="form-hint">Winner</label>
+                        <div class="wo-winner-options">
+                            <label class="wo-winner-option">
+                                <input type="radio" name="winner_team_id"
+                                       value="{{ match.team1_id }}" class="wo-winner-radio">
+                                <span>{{ match.team1.name if match.team1 else 'Team 1' }}</span>
+                            </label>
+                            <label class="wo-winner-option">
+                                <input type="radio" name="winner_team_id"
+                                       value="{{ match.team2_id }}" class="wo-winner-radio">
+                                <span>{{ match.team2.name if match.team2 else 'Team 2' }}</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {% if tournament.sport_type == 'cricket' %}
+                    <div class="result-note">
+                        🏏 Win={{ tournament.points_win }}pts · Tie={{ tournament.points_draw }}pt each · No Result=0pts
+                    </div>
+                    {% elif tournament.sport_type == 'esports' %}
+                    <div class="result-note">
+                        🎮 Win={{ tournament.points_win }}pt · Loss=0pts
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <button type="submit" class="btn btn-primary w-full btn-submit-result">Submit Result</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ── Knockout: future locked rounds ──────────────────────────────────────── #}
+{% if locked_matches %}
+<div class="results-section">
+    <div class="section-header">
+        <h2 class="section-title">Upcoming Rounds</h2>
+        <span class="section-hint">Complete Round {{ current_round }} to unlock</span>
+    </div>
+    <div class="upcoming-list">
+        {% for match in locked_matches %}
+        <div class="upcoming-item">
+            <span class="upcoming-round">R{{ match.round_number }}</span>
+            <span class="upcoming-teams">
+                {{ match.team1.name if match.team1 else 'TBD' }}
+                <span class="upcoming-vs">vs</span>
+                {{ match.team2.name if match.team2 else 'TBD' }}
+            </span>
+            <span class="upcoming-status locked-label">🔒 Locked</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ── Edit completed results (round-robin only) ───────────────────────────── #}
+{% if completed_matches and tournament.format == 'round_robin' %}
+<div class="results-section">
+    <div class="section-header">
+        <h2 class="section-title">Edit Completed Results</h2>
+        <span class="section-count">Click to correct a result</span>
+    </div>
+    <div class="completed-list">
+        {% for match in completed_matches %}
+        <div class="completed-item">
+            <div class="completed-scores">
+                <span class="{% if match.winner_id == match.team1_id %}match-winner{% endif %}">
+                    {{ match.team1.name if match.team1 else '?' }}
+                </span>
+                {% if tournament.is_score_based() %}
+                    <span class="completed-score-display">{{ match.team1_score }} — {{ match.team2_score }}</span>
+                {% else %}
+                    {% if match.result_type == 'tie' %}<span class="completed-score-display result-tag-tie">TIE</span>
+                    {% elif match.result_type == 'no_result' %}<span class="completed-score-display result-tag-nr">N/R</span>
+                    {% elif match.winner %}<span class="completed-score-display result-tag-win">WON</span>
+                    {% else %}<span class="completed-score-display">—</span>{% endif %}
+                {% endif %}
+                <span class="{% if match.winner_id == match.team2_id %}match-winner{% endif %}">
+                    {{ match.team2.name if match.team2 else '?' }}
+                </span>
+                <span class="completed-round-tag">R{{ match.round_number }}</span>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="toggleEditForm({{ match.id }})">Edit</button>
+
+            <div class="edit-result-form" id="edit-form-{{ match.id }}" style="display:none;">
+                <form action="{{ url_for('match.edit_result', tournament_id=tournament.id, match_id=match.id) }}"
+                      method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if tournament.is_score_based() %}
+                    <div class="edit-score-row">
+                        <input type="number" name="score1" class="score-input-sm-inline"
+                               value="{{ match.team1_score }}" min="0" max="999" required>
+                        <span class="score-sep-sm">—</span>
+                        <input type="number" name="score2" class="score-input-sm-inline"
+                               value="{{ match.team2_score }}" min="0" max="999" required>
+                        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        <button type="button" class="btn btn-outline btn-sm"
+                                onclick="toggleEditForm({{ match.id }})">Cancel</button>
+                    </div>
+                    {% else %}
+                    <div class="wo-edit-row">
+                        <select name="result_type" class="form-select form-select-sm">
+                            <option value="win" {% if match.result_type == 'win' %}selected{% endif %}>Win</option>
+                            {% if tournament.sport_type == 'cricket' %}
+                            <option value="tie" {% if match.result_type == 'tie' %}selected{% endif %}>Tie</option>
+                            <option value="no_result" {% if match.result_type == 'no_result' %}selected{% endif %}>No Result</option>
+                            {% endif %}
+                        </select>
+                        <select name="winner_team_id" class="form-select form-select-sm">
+                            <option value="">— Winner —</option>
+                            <option value="{{ match.team1_id }}" {% if match.winner_id == match.team1_id %}selected{% endif %}>
+                                {{ match.team1.name if match.team1 else 'Team 1' }}
+                            </option>
+                            <option value="{{ match.team2_id }}" {% if match.winner_id == match.team2_id %}selected{% endif %}>
+                                {{ match.team2.name if match.team2 else 'Team 2' }}
+                            </option>
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        <button type="button" class="btn btn-outline btn-sm"
+                                onclick="toggleEditForm({{ match.id }})">Cancel</button>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if not editable_matches and not tournament.is_completed() %}
+<div class="empty-state">
+    <div class="empty-icon">✅</div>
+    <h3>All matches played!</h3>
+    <a href="{{ url_for('standings.progress', tournament_id=tournament.id) }}" class="btn btn-primary">See Final Results</a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Score-based form validation
+document.querySelectorAll('.result-form[data-mode="score_based"]').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+        const inputs = form.querySelectorAll('.score-input');
+        const s1 = parseInt(inputs[0].value, 10);
+        const s2 = parseInt(inputs[1].value, 10);
+        const isKnockout = form.dataset.format === 'knockout';
+        if (isNaN(s1) || isNaN(s2)) { e.preventDefault(); alert('Please enter valid scores.'); return; }
+        if (s1 < 0 || s2 < 0) { e.preventDefault(); alert('Scores cannot be negative.'); return; }
+        if (isKnockout && s1 === s2) { e.preventDefault(); alert('Knockout matches cannot end in a draw.'); return; }
+    });
+});
+
+// Winner-only form wiring
+document.querySelectorAll('.result-form[data-mode="winner_only"]').forEach(function(form) {
+    const matchId   = form.closest('.result-card').id.replace('match-', '');
+    const winnerRow = document.getElementById('winner-row-' + matchId);
+    const typeRadios = form.querySelectorAll('.wo-type-radio');
+
+    function syncSelected(radioGroup) {
+        radioGroup.forEach(function(r) {
+            const lbl = r.closest('.wo-type-option, .wo-winner-option');
+            if (lbl) lbl.classList.toggle('selected', r.checked);
+        });
+    }
+
+    function syncWinnerRow() {
+        const sel = form.querySelector('.wo-type-radio:checked');
+        const isWin = sel && sel.value === 'win';
+        winnerRow.style.display = isWin ? '' : 'none';
+        if (!isWin) {
+            form.querySelectorAll('.wo-winner-radio').forEach(r => {
+                r.checked = false;
+                const lbl = r.closest('.wo-winner-option');
+                if (lbl) lbl.classList.remove('selected');
+            });
+        }
+        syncSelected(typeRadios);
+    }
+
+    form.querySelectorAll('.wo-winner-radio').forEach(r => {
+        r.addEventListener('change', () => syncSelected(form.querySelectorAll('.wo-winner-radio')));
+    });
+    typeRadios.forEach(r => r.addEventListener('change', syncWinnerRow));
+    syncWinnerRow();
+
+    form.addEventListener('submit', function(e) {
+        const type = form.querySelector('.wo-type-radio:checked');
+        if (!type) { e.preventDefault(); alert('Please select a result type.'); return; }
+        if (type.value === 'win') {
+            const winner = form.querySelector('.wo-winner-radio:checked');
+            if (!winner) { e.preventDefault(); alert('Please select the winning team.'); return; }
+        }
+        if (form.dataset.format === 'knockout' && type.value !== 'win') {
+            e.preventDefault(); alert('Knockout matches must have a winner.'); return;
+        }
+    });
+});
+
+function toggleEditForm(matchId) {
+    const form = document.getElementById('edit-form-' + matchId);
+    const isOpen = form.style.display !== 'none';
+    document.querySelectorAll('.edit-result-form').forEach(f => f.style.display = 'none');
+    if (!isOpen) form.style.display = 'block';
+}
+</script>
+{% endblock %}

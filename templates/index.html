@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Tournament Planner — Home{% endblock %}
+{% block content %}
+
+<div class="hero">
+    <div class="hero-content">
+        <h1 class="hero-title">TOURNAMENT<br><em>PLANNER</em></h1>
+        <p class="hero-sub">Create competitions. Generate fixtures. Track results.</p>
+        <a href="{{ url_for('tournament.create_tournament') }}" class="btn btn-primary btn-lg">
+            Create Tournament →
+        </a>
+    </div>
+    <div class="hero-decoration">
+        <div class="deco-bracket">
+            <div class="deco-line"></div>
+            <div class="deco-node"></div>
+            <div class="deco-line"></div>
+            <div class="deco-node active"></div>
+            <div class="deco-line"></div>
+            <div class="deco-node"></div>
+            <div class="deco-line"></div>
+        </div>
+    </div>
+</div>
+
+<section class="tournaments-section">
+    <div class="section-header">
+        <h2 class="section-title">All Tournaments</h2>
+        <span class="section-count">{{ tournaments | length }} total</span>
+    </div>
+
+    {% if tournaments %}
+    <div class="tournament-grid">
+        {% for t in tournaments %}
+        <div class="t-card t-card-{{ t.status }}">
+            <div class="t-card-header">
+                <div class="t-card-badges">
+                    <span class="badge badge-format badge-{{ t.format }}">{{ t.format | replace('_', ' ') | upper }}</span>
+                    <span class="badge badge-status badge-{{ t.status }}">{{ t.status | upper }}</span>
+                </div>
+                <form action="{{ url_for('tournament.delete_tournament', tournament_id=t.id) }}" method="POST" class="delete-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn-icon btn-danger" title="Delete" onclick="return confirm('Delete \'{{ t.name }}\'?')">×</button>
+                </form>
+            </div>
+            <h3 class="t-card-name">{{ t.name }}</h3>
+            <div class="t-card-meta">
+                <span class="meta-item">
+                    <span class="meta-label">Teams</span>
+                    <span class="meta-value">{{ t.team_count() }}</span>
+                </span>
+                <span class="meta-item">
+                    <span class="meta-label">Created</span>
+                    <span class="meta-value">{{ t.created_at.strftime('%b %d') }}</span>
+                </span>
+            </div>
+            <div class="t-card-actions">
+                {% if t.is_setup() %}
+                    <a href="{{ url_for('team.manage_teams', tournament_id=t.id) }}" class="btn btn-secondary btn-sm">Manage Teams</a>
+                {% else %}
+                    <a href="{{ url_for('standings.progress', tournament_id=t.id) }}" class="btn btn-secondary btn-sm">View Progress</a>
+                    <a href="{{ url_for('match.fixtures', tournament_id=t.id) }}" class="btn btn-outline btn-sm">Fixtures</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">🏆</div>
+        <h3>No tournaments yet</h3>
+        <p>Create your first tournament to get started.</p>
+        <a href="{{ url_for('tournament.create_tournament') }}" class="btn btn-primary">Create Tournament</a>
+    </div>
+    {% endif %}
+</section>
+
+{% endblock %}

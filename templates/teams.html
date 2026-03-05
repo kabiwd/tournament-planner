@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Team Management — {{ tournament.name }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Team Management</h1>
+        <p class="page-sub">{{ tournament.name }}</p>
+    </div>
+    <div class="header-actions">
+        {% if tournament.is_setup() and teams | length >= 2 %}
+        <form action="{{ url_for('tournament.generate_fixtures', tournament_id=tournament.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Generate fixtures with {{ teams | length }} teams? This cannot be undone.')">
+                Generate Fixtures →
+            </button>
+        </form>
+        {% elif not tournament.is_setup() %}
+        <a href="{{ url_for('match.fixtures', tournament_id=tournament.id) }}" class="btn btn-primary">View Fixtures →</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="two-col">
+    <!-- Add Team Panel -->
+    {% if tournament.is_setup() %}
+    <div class="panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Add Team</h2>
+        </div>
+        <div class="panel-body">
+            <form method="POST" action="{{ url_for('team.manage_teams', tournament_id=tournament.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="add">
+                <div class="form-group">
+                    <input
+                        type="text"
+                        name="team_name"
+                        class="form-input"
+                        placeholder="Team name..."
+                        required
+                        autocomplete="off"
+                        id="team-input"
+                    >
+                </div>
+                <button type="submit" class="btn btn-primary w-full">Add Team</button>
+            </form>
+        </div>
+        <div class="panel-info">
+            <div class="info-row">
+                <span>Teams added:</span>
+                <strong>{{ teams | length }}</strong>
+            </div>
+            <div class="info-row">
+                <span>Minimum required:</span>
+                <strong>2</strong>
+            </div>
+            {% if tournament.format == 'round_robin' %}
+            <div class="info-note">
+                Round Robin: {{ teams | length }} teams = {{ (teams | length * (teams | length - 1)) // 2 }} total matches.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Teams List -->
+    <div class="panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Teams ({{ teams | length }})</h2>
+            <div class="search-box-sm">
+                <input type="text" id="team-search" placeholder="Search teams..." class="form-input form-input-sm">
+            </div>
+        </div>
+        <div class="panel-body">
+            {% if teams %}
+            <ul class="team-list" id="team-list">
+                {% for team in teams %}
+                <li class="team-item" data-name="{{ team.name | lower }}">
+                    <div class="team-info">
+                        <div class="team-avatar">{{ team.name[0] | upper }}</div>
+                        <span class="team-name" id="name-{{ team.id }}">{{ team.name }}</span>
+                    </div>
+                    {% if tournament.is_setup() %}
+                    <div class="team-actions">
+                        <button class="btn-icon btn-edit" onclick="toggleEdit({{ team.id }})" title="Edit">✏</button>
+                        <form action="{{ url_for('team.delete_team', tournament_id=tournament.id, team_id=team.id) }}" method="POST" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn-icon btn-danger" title="Remove" onclick="return confirm('Remove {{ team.name }}?')">×</button>
+                        </form>
+                    </div>
+                    {% endif %}
+
+                    <!-- Inline edit form -->
+                    {% if tournament.is_setup() %}
+                    <div class="edit-form" id="edit-{{ team.id }}" style="display:none;">
+                        <form action="{{ url_for('team.edit_team', tournament_id=tournament.id, team_id=team.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="edit-row">
+                                <input type="text" name="new_name" value="{{ team.name }}" class="form-input form-input-sm" required>
+                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                                <button type="button" class="btn btn-outline btn-sm" onclick="toggleEdit({{ team.id }})">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-state-sm">
+                <p>No teams yet. Add your first team!</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleEdit(teamId) {
+    const editForm = document.getElementById('edit-' + teamId);
+    const isVisible = editForm.style.display !== 'none';
+    // Hide all
+    document.querySelectorAll('.edit-form').forEach(f => f.style.display = 'none');
+    if (!isVisible) {
+        editForm.style.display = 'block';
+        editForm.querySelector('input').focus();
+    }
+}
+
+// Live search
+document.getElementById('team-search').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('.team-item').forEach(item => {
+        item.style.display = item.dataset.name.includes(q) ? '' : 'none';
+    });
+});
+
+// Auto-focus team input
+const teamInput = document.getElementById('team-input');
+if (teamInput) teamInput.focus();
+</script>
+{% endblock %}

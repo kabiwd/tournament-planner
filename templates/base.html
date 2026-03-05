@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}Tournament Planner{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="{{ url_for('tournament.index') }}" class="nav-brand">
+                <span class="brand-icon">⚽</span>
+                <span class="brand-text">TOURNEY</span>
+                <span class="brand-sub">PLANNER</span>
+            </a>
+            <div class="nav-links">
+                <a href="{{ url_for('tournament.index') }}" class="nav-link">Tournaments</a>
+                <a href="{{ url_for('tournament.create_tournament') }}" class="nav-link nav-cta">+ New</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">
+                        <span>{{ message }}</span>
+                        <button class="flash-close" onclick="this.parentElement.remove()">×</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    {% if tournament is defined %}
+    <div class="tournament-nav">
+        <div class="t-nav-inner">
+            <div class="t-nav-title">
+                <span class="t-name">{{ tournament.name }}</span>
+                <span class="t-badge t-badge-{{ tournament.format }}">{{ tournament.format | replace('_', ' ') | upper }}</span>
+                <span class="t-badge t-badge-status-{{ tournament.status }}">{{ tournament.status | upper }}</span>
+            </div>
+            {% if not tournament.is_setup() %}
+            <div class="t-nav-links">
+                <a href="{{ url_for('match.fixtures', tournament_id=tournament.id) }}" class="t-nav-link">Fixtures</a>
+                {% if tournament.format == 'round_robin' %}
+                <a href="{{ url_for('standings.schedule_view', tournament_id=tournament.id) }}" class="t-nav-link">Schedule</a>
+                {% endif %}
+                <a href="{{ url_for('match.results_page', tournament_id=tournament.id) }}" class="t-nav-link">Results</a>
+                {% if tournament.format == 'round_robin' %}
+                <a href="{{ url_for('standings.standings', tournament_id=tournament.id) }}" class="t-nav-link">Standings</a>
+                {% endif %}
+                <a href="{{ url_for('standings.progress', tournament_id=tournament.id) }}" class="t-nav-link">Progress</a>
+            </div>
+            {% else %}
+            <div class="t-nav-links">
+                <a href="{{ url_for('team.manage_teams', tournament_id=tournament.id) }}" class="t-nav-link">Teams</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <span>Tournament Planner v6</span>
+            <span class="footer-sep">·</span>
+            <span>Flask + SQLite</span>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
