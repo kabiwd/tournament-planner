@@ -171,3 +171,27 @@ makes this reliable even if the Python check is bypassed.
 
 **Q: Why reportlab for PDFs?**
 A: Pure Python, no system dependencies (no wkhtmltopdf). Easy to deploy.
+
+
+## Screenshots
+
+### Home
+![Home](screenshots/home.png)
+
+### Create Tournament
+![Create Tournament](screenshots/create-tournament.png)
+
+### Scheduling & Rules Setup
+![Create Options](screenshots/create-options.png)
+
+### Team Management
+![Team Management](screenshots/team-management.png)
+
+### Fixtures (Round View)
+![Fixtures](screenshots/fixtures.png)
+
+### Schedule (Chronological View)
+![Schedule View](screenshots/schedule-view.png)
+
+### Update Results
+![Update Results](screenshots/update-results.png)
