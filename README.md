@@ -149,30 +149,6 @@ python tests.py
 
 ---
 
-## Interview Notes
-
-**Q: How does the scheduler handle odd-number teams in round robin?**
-A: Berger algorithm with a dummy `None` BYE slot. For N odd teams, one
-"bye" match is generated per round; the real team advances automatically.
-
-**Q: How does manual lock work?**
-A: `Match.manual_locked = True` is set when an admin saves a manual time.
-`clear_pending_schedule` and `schedule_round_robin` both skip locked matches,
-so re-running the auto-scheduler never overwrites manual corrections.
-
-**Q: Why no round-based locking for Round Robin?**
-A: Round Robin is an all-play-all format with no bracket dependency. Any
-match can be played at any time. Locking future rounds would be wrong UX.
-
-**Q: How is DB-level case-insensitivity enforced?**
-A: A `name_key` column stores the normalised (stripped, lowercased) team
-name. A `UniqueConstraint('tournament_id', 'name_key')` at the DB level
-makes this reliable even if the Python check is bypassed.
-
-**Q: Why reportlab for PDFs?**
-A: Pure Python, no system dependencies (no wkhtmltopdf). Easy to deploy.
-
-
 ## Screenshots
 
 ### Home
