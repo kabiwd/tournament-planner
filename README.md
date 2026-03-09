@@ -1,4 +1,4 @@
-# Tournament Planner v6
+# Tournament Planner 
 
 A clean, interview-ready Flask tournament management system supporting
 **Round Robin** and **Knockout** formats with sport-aware result modes.
